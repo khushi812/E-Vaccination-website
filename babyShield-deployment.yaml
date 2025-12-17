@@ -1,0 +1,102 @@
+# -------------------------------
+# PersistentVolumeClaim (optional – remove if not needed)
+# -------------------------------
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: babyshield-pvc
+  namespace: "2401180"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: babyshield-deployment
+  namespace: "2401180"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: babyshield
+  template:
+    metadata:
+      labels:
+        app: babyshield
+    spec:
+      containers:
+        - name: babyshield-container
+          image: nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/babyshield:v1
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+
+          # ---- HEALTH CHECKS ----
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 30
+            periodSeconds: 30
+
+          # ---- PVC Mount (optional) ----
+          volumeMounts:
+            - name: babyshield-static
+              mountPath: /usr/share/nginx/html   # change if not using nginx
+
+      volumes:
+        - name: babyshield-static
+          persistentVolumeClaim:
+            claimName: babyshield-pvc
+---
+# -------------------------------
+# Service
+# -------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: babyshield-service
+  namespace: "2401180"
+spec:
+  selector:
+    app: babyshield
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+  type: ClusterIP
+---
+# -------------------------------
+# Ingress
+# -------------------------------
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: babyshield-ingress
+  namespace: "2401180"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: babyshield.imcc.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: babyshield-service
+                port:
+                  number: 80
