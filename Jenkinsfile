@@ -1,15 +1,41 @@
+properties([
+  pipelineTriggers([]),
+  durabilityHint('PERFORMANCE_OPTIMIZED')
+])
+
 pipeline {
+
     agent {
         kubernetes {
-            yaml '''
+            yaml """
 apiVersion: v1
 kind: Pod
 spec:
   containers:
+
+  - name: dind
+    image: docker:dind
+    securityContext:
+      privileged: true
+    args:
+      - "--host=tcp://0.0.0.0:2375"
+      - "--insecure-registry=nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"   // 🔴 CHANGED (Nexus registry)
+    env:
+      - name: DOCKER_TLS_CERTDIR
+        value: ""
+    volumeMounts:
+      - name: docker-storage
+        mountPath: /var/lib/docker
+      - name: workspace-volume
+        mountPath: /home/jenkins/agent
+
   - name: sonar-scanner
     image: sonarsource/sonar-scanner-cli
     command: ["cat"]
     tty: true
+    volumeMounts:
+      - name: workspace-volume
+        mountPath: /home/jenkins/agent
 
   - name: kubectl
     image: bitnami/kubectl:latest
@@ -17,50 +43,61 @@ spec:
     tty: true
     securityContext:
       runAsUser: 0
-    env:
-    - name: KUBECONFIG
-      value: /kube/config
     volumeMounts:
-    - name: kubeconfig-secret
-      mountPath: /kube/config
-      subPath: kubeconfig
-
-  - name: dind
-    image: docker:dind
-    args: ["--storage-driver=overlay2"]
-    securityContext:
-      privileged: true
-    env:
-    - name: DOCKER_TLS_CERTDIR
-      value: ""
+      - name: workspace-volume
+        mountPath: /home/jenkins/agent
 
   volumes:
-  - name: kubeconfig-secret
-    secret:
-      secretName: kubeconfig-secret
-'''
+    - name: docker-storage
+      emptyDir: {}
+    - name: workspace-volume
+      emptyDir: {}
+"""
         }
     }
 
+    options {
+        skipDefaultCheckout()   // 🔴 CHANGED (manual git clone used)
+    }
+
     environment {
-        PROJECT_KEY   = "2401180_E_Vaccination"
-        PROJECT_NAME  = "2401180_E_Vaccination"
-        SONAR_URL     = "http://my-sonarqube-sonarqube.sonarqube.svc.cluster.local:9000"
-        SONAR_SOURCES = "."
 
-        IMAGE_LOCAL   = "babyshield:latest"
-        REGISTRY      = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
-        REGISTRY_PATH = "smruti-project/babyshield-frontend"
-        IMAGE_TAGGED  = "${REGISTRY}/${REGISTRY_PATH}:v${BUILD_NUMBER}"
+        // 🔹 Project
+        PROJECT_NAME = "E-Vaccination"
+        DOCKER_IMAGE = "e-vaccination"    // 🔴 CHANGED (your Docker image name)
 
-        NAMESPACE     = "2401180"
+        // 🔹 SonarQube
+        SONAR_PROJECT_KEY = "2401180_E_Vaccination"   // 🔴 CHANGED (must exist in SonarQube)
+        SONAR_URL = "http://my-sonarqube-sonarqube.sonarqube.svc.cluster.local:9000"   // 🔴 CHANGED
+
+        // 🔹 Nexus
+        REGISTRY_HOST = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"  // 🔴 CHANGED
+        REGISTRY = "${REGISTRY_HOST}/2401180"   // 🔴 CHANGED (repo name in Nexus)
+
+        // 🔹 Kubernetes
+        NAMESPACE = "2401180"   // 🔴 CHANGED (your namespace)
     }
 
     stages {
 
         stage('Checkout Code') {
             steps {
-                git branch: 'main', url: 'https://github.com/khushi812/E-Vaccination-website.git'
+                sh '''
+                    echo "📥 Cloning source code..."
+                    rm -rf *
+                    git clone https://github.com/khushi812/E-Vaccination-website.git .   // 🔴 CHANGED (your repo)
+                '''
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                container('dind') {
+                    sh '''
+                        echo "🐳 Building Docker image..."
+                        docker build -t ${DOCKER_IMAGE}:${BUILD_NUMBER} -t ${DOCKER_IMAGE}:latest .
+                    '''
+                }
             }
         }
 
@@ -68,50 +105,49 @@ spec:
             steps {
                 container('sonar-scanner') {
                     withCredentials([string(
-                        credentialsId: 'sonar-token-2401180_E_vaccination',
+                        credentialsId: 'sonar-token-2401180_E_vaccination',   // 🟢 REQUIRED in Jenkins
                         variable: 'SONAR_TOKEN'
                     )]) {
                         sh '''
-                        sonar-scanner \
-                        -Dsonar.projectKey=${PROJECT_KEY} \
-                        -Dsonar.projectName=${PROJECT_NAME} \
-                        -Dsonar.sources=${SONAR_SOURCES} \
-                        -Dsonar.host.url=${SONAR_URL} \
-                        -Dsonar.token=${SONAR_TOKEN}
+                            echo "🔍 Running SonarQube analysis..."
+                            sonar-scanner \
+                              -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                              -Dsonar.sources=. \
+                              -Dsonar.host.url=${SONAR_URL} \
+                              -Dsonar.token=${SONAR_TOKEN}
                         '''
                     }
                 }
             }
         }
 
-        stage('Build Docker Image') {
-            steps {
-                container('dind') {
-                    sh 'docker build -t ${IMAGE_LOCAL} .'
-                }
-            }
-        }
-
-        stage('Login to Docker Registry') {
+        stage('Login to Nexus') {
             steps {
                 container('dind') {
                     withCredentials([usernamePassword(
-                        credentialsId: 'nexus-docker-creds',
-                        usernameVariable: 'DOCKER_USER',
-                        passwordVariable: 'DOCKER_PASS'
+                        credentialsId: 'nexus-docker-creds',   // 🟢 REQUIRED in Jenkins
+                        usernameVariable: 'NEXUS_USER',
+                        passwordVariable: 'NEXUS_PASS'
                     )]) {
-                        sh 'docker login ${REGISTRY} -u $DOCKER_USER -p $DOCKER_PASS'
+                        sh '''
+                            echo "🔐 Logging into Nexus..."
+                            docker login ${REGISTRY_HOST} -u $NEXUS_USER -p $NEXUS_PASS
+                        '''
                     }
                 }
             }
         }
 
-        stage('Tag & Push Image') {
+        stage('Push Docker Image') {
             steps {
                 container('dind') {
                     sh '''
-                        docker tag ${IMAGE_LOCAL} ${IMAGE_TAGGED}
-                        docker push ${IMAGE_TAGGED}
+                        echo "📤 Pushing Docker images..."
+                        docker tag ${DOCKER_IMAGE}:${BUILD_NUMBER} ${REGISTRY}/${DOCKER_IMAGE}:${BUILD_NUMBER}
+                        docker tag ${DOCKER_IMAGE}:${BUILD_NUMBER} ${REGISTRY}/${DOCKER_IMAGE}:latest
+
+                        docker push ${REGISTRY}/${DOCKER_IMAGE}:${BUILD_NUMBER}
+                        docker push ${REGISTRY}/${DOCKER_IMAGE}:latest
                     '''
                 }
             }
@@ -121,11 +157,24 @@ spec:
             steps {
                 container('kubectl') {
                     sh '''
-                        kubectl apply -f babyshield-deployment.yaml -n ${NAMESPACE}
-                        kubectl rollout status deployment/babyshield-deployment -n ${NAMESPACE}
+                        echo "🚀 Deploying to Kubernetes..."
+                        kubectl apply -f deployment.yaml -n ${NAMESPACE}   // 🔴 CHANGED (file + namespace)
+                        kubectl rollout status deployment/e-vaccination-deployment -n ${NAMESPACE}   // 🔴 CHANGED
                     '''
                 }
             }
+        }
+    }
+
+    post {
+        success {
+            echo "🎉 E-Vaccination CI/CD Pipeline SUCCESS"
+        }
+        failure {
+            echo "❌ E-Vaccination CI/CD Pipeline FAILED"
+        }
+        always {
+            echo "🔁 Pipeline finished"
         }
     }
 }
