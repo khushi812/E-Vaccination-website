@@ -76,17 +76,18 @@ spec:
             }
         }
 
-        stage('Build Docker Image') {
-            steps {
-                container('dind') {
-                    sh '''
-                        echo "🐳 Building Docker Image..."
-                        docker build -t ${IMAGE_LOCAL} .
-                        docker image ls
-                    '''
-                }
-            }
+       stage('Build Docker Image') {
+    steps {
+        container('dind') {
+            sh '''
+                docker --version
+                echo "🐳 Building Docker Image..."
+                docker build -t ${IMAGE_LOCAL} .
+            '''
         }
+    }
+}
+
 
         stage('SonarQube Analysis') {
             steps {
