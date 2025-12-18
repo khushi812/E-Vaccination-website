@@ -71,7 +71,7 @@ spec:
 
         stage('Checkout Code') {
             steps {
-                git url: 'https://github.com/Smruti2506/E_vaccination_deploy.git', branch: 'main'
+                git url: 'https://github.com/khushi812/E-Vaccination-website.git, branch: 'main'
             }
         }
 
