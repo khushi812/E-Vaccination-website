@@ -75,16 +75,18 @@ spec:
         stage('Build Docker Image') {
             steps {
                 container('dind') {
-                    sh '''
-                        echo "Waiting for Docker daemon..."
-                        until docker info > /dev/null 2>&1; do
-                          sleep 3
-                        done
+                    timeout(time: 5, unit: 'MINUTES') {
+                        sh '''
+                            echo "Waiting for Docker daemon..."
+                            until docker info > /dev/null 2>&1; do
+                              sleep 3
+                            done
 
-                        echo "Building Docker image..."
-                        docker build -t ${IMAGE_LOCAL} .
-                        docker image ls
-                    '''
+                            echo "Building Docker image..."
+                            docker build -t ${IMAGE_LOCAL} .
+                            docker image ls
+                        '''
+                    }
                 }
             }
         }
@@ -100,7 +102,7 @@ spec:
                               -Dsonar.projectName=${PROJECT_NAME} \
                               -Dsonar.sources=${SONAR_SOURCES} \
                               -Dsonar.host.url=${SONAR_URL} \
-                              -Dsonar.token=${SONAR_TOKEN}
+                              -Dsonar.login=${SONAR_TOKEN}
                         '''
                     }
                 }
@@ -110,15 +112,17 @@ spec:
         stage('Login to Docker Registry') {
             steps {
                 container('dind') {
-                    sh '''
-                        echo "Waiting for Docker daemon..."
-                        until docker info > /dev/null 2>&1; do
-                          sleep 3
-                        done
+                    withCredentials([usernamePassword(credentialsId: 'docker-registry-cred', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        sh '''
+                            echo "Waiting for Docker daemon..."
+                            until docker info > /dev/null 2>&1; do
+                              sleep 3
+                            done
 
-                        echo "Logging into Docker Registry..."
-                        docker login ${REGISTRY} -u admin -p Changeme@2025
-                    '''
+                            echo "Logging into Docker Registry..."
+                            echo $DOCKER_PASS | docker login ${REGISTRY} -u $DOCKER_USER --password-stdin
+                        '''
+                    }
                 }
             }
         }
@@ -126,13 +130,15 @@ spec:
         stage('Tag & Push Image') {
             steps {
                 container('dind') {
-                    sh '''
-                        echo "Tagging Docker image..."
-                        docker tag ${IMAGE_LOCAL} ${IMAGE_TAGGED}
+                    timeout(time: 5, unit: 'MINUTES') {
+                        sh '''
+                            echo "Tagging Docker image..."
+                            docker tag ${IMAGE_LOCAL} ${IMAGE_TAGGED}
 
-                        echo "Pushing Docker image..."
-                        docker push ${IMAGE_TAGGED}
-                    '''
+                            echo "Pushing Docker image..."
+                            docker push ${IMAGE_TAGGED}
+                        '''
+                    }
                 }
             }
         }
@@ -140,12 +146,14 @@ spec:
         stage('Deploy to Kubernetes') {
             steps {
                 container('kubectl') {
-                    sh '''
-                        echo "Applying Kubernetes deployment..."
-                        kubectl apply -f babyshield-deployment.yaml
-                        echo "Waiting for rollout to complete..."
-                        kubectl rollout status deployment/babyshield-deployment -n ${NAMESPACE}
-                    '''
+                    timeout(time: 5, unit: 'MINUTES') {
+                        sh '''
+                            echo "Applying Kubernetes deployment..."
+                            kubectl apply -f babyshield-deployment.yaml
+                            echo "Waiting for rollout to complete..."
+                            kubectl rollout status deployment/babyshield-deployment -n ${NAMESPACE}
+                        '''
+                    }
                 }
             }
         }
