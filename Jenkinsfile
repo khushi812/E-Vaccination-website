@@ -68,7 +68,7 @@ spec:
 
         stage('Checkout Code') {
             steps {
-                git url: 'https://github.com/Smruti2506/E_vaccination_deploy.git', branch: 'main'
+                git url: 'https://github.com/khushi812/E-Vaccination-website.git', branch: 'main'
             }
         }
 
@@ -90,7 +90,7 @@ spec:
         stage('SonarQube Analysis') {
             steps {
                 container('sonar-scanner') {
-                    withCredentials([string(credentialsId: 'sonar-token-2401107', variable: 'SONAR_TOKEN')]) {
+                    withCredentials([string(credentialsId: 'sonar-token-2401180', variable: 'SONAR_TOKEN')]) {
                         sh '''
                             sonar-scanner \
                               -Dsonar.projectKey=${PROJECT_KEY} \
