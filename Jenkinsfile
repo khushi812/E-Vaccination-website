@@ -1,13 +1,13 @@
 pipeline {
     agent {
         kubernetes {
-            yaml """
+            yaml '''
 apiVersion: v1
 kind: Pod
 spec:
   containers:
   - name: sonar-scanner
-    image: sonarsource/sonar-scanner-cli:latest
+    image: sonarsource/sonar-scanner-cli
     command: ["cat"]
     tty: true
 
@@ -19,62 +19,56 @@ spec:
       runAsUser: 0
       readOnlyRootFilesystem: false
     env:
-      - name: KUBECONFIG
-        value: /kube/config
+    - name: KUBECONFIG
+      value: /kube/config
     volumeMounts:
-      - name: kubeconfig-secret
-        mountPath: /kube/config
-        subPath: kubeconfig
+    - name: kubeconfig-secret
+      mountPath: /kube/config
+      subPath: kubeconfig
 
   - name: dind
-    image: docker:dind:latest
-    args: ["--host=tcp://0.0.0.0:2375", "--storage-driver=overlay2"]
+    image: docker:dind
+    args: ["--storage-driver=overlay2"]
     securityContext:
       privileged: true
     env:
-      - name: DOCKER_TLS_CERTDIR
-        value: ""
+    - name: DOCKER_TLS_CERTDIR
+      value: ""
     volumeMounts:
-      - name: docker-config
-        mountPath: /etc/docker/daemon.json
-        subPath: daemon.json
+    - name: docker-config
+      mountPath: /etc/docker/daemon.json
+      subPath: daemon.json
 
   volumes:
-    - name: docker-config
-      configMap:
-        name: docker-daemon-config
-    - name: kubeconfig-secret
-      secret:
-        secretName: kubeconfig-secret
-"""
+  - name: docker-config
+    configMap:
+      name: docker-daemon-config
+  - name: kubeconfig-secret
+    secret:
+      secretName: kubeconfig-secret
+'''
         }
     }
 
     environment {
-        // -------- SONAR CONFIG --------
         PROJECT_KEY   = "2401180_E_Vaccination"
         PROJECT_NAME  = "2401180_E_Vaccination"
         SONAR_URL     = "http://my-sonarqube-sonarqube.sonarqube.svc.cluster.local:9000"
         SONAR_SOURCES = "."
 
-        // -------- DOCKER CONFIG --------
         IMAGE_LOCAL   = "babyshield:latest"
         REGISTRY      = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
         REGISTRY_PATH = "smruti-project/babyshield-frontend"
         IMAGE_TAGGED  = "${REGISTRY}/${REGISTRY_PATH}:v${env.BUILD_NUMBER}"
 
-        // -------- K8S CONFIG --------
         NAMESPACE     = "2401180"
-
-        // DinD Docker host
-        DOCKER_HOST   = "tcp://dind:2375"
     }
 
     stages {
 
         stage('Checkout Code') {
             steps {
-                git url: 'https://github.com/khushi812/E-Vaccination-website.git', branch: 'main'
+                git url: 'https://github.com/Smruti2506/E_vaccination_deploy.git', branch: 'main'
             }
         }
 
@@ -82,9 +76,10 @@ spec:
             steps {
                 container('dind') {
                     sh '''
-                        echo "🐳 Waiting for Docker to be ready..."
-                        until docker info; do sleep 5; done
-                        echo "🐳 Building Docker Image..."
+                        until docker info > /dev/null 2>&1; do
+                          sleep 3
+                        done
+
                         docker build -t ${IMAGE_LOCAL} .
                         docker image ls
                     '''
@@ -97,14 +92,12 @@ spec:
                 container('sonar-scanner') {
                     withCredentials([string(credentialsId: 'sonar-token-2401107', variable: 'SONAR_TOKEN')]) {
                         sh '''
-                            echo "🔍 Running Sonar Scanner..."
                             sonar-scanner \
                               -Dsonar.projectKey=${PROJECT_KEY} \
                               -Dsonar.projectName=${PROJECT_NAME} \
                               -Dsonar.sources=${SONAR_SOURCES} \
                               -Dsonar.host.url=${SONAR_URL} \
-                              -Dsonar.login=${SONAR_TOKEN} \
-                              -Dsonar.sourceEncoding=UTF-8
+                              -Dsonar.token=${SONAR_TOKEN}
                         '''
                     }
                 }
@@ -115,7 +108,9 @@ spec:
             steps {
                 container('dind') {
                     sh '''
-                        echo "🔑 Logging in to Docker Registry..."
+                        until docker info > /dev/null 2>&1; do
+                          sleep 3
+                        done
                         docker login ${REGISTRY} -u admin -p Changeme@2025
                     '''
                 }
@@ -126,7 +121,6 @@ spec:
             steps {
                 container('dind') {
                     sh '''
-                        echo "📤 Tagging & Pushing Image..."
                         docker tag ${IMAGE_LOCAL} ${IMAGE_TAGGED}
                         docker push ${IMAGE_TAGGED}
                     '''
@@ -138,18 +132,11 @@ spec:
             steps {
                 container('kubectl') {
                     sh '''
-                        echo "🚀 Deploying BabyShield..."
-                        kubectl apply -f babyshield-deployment.yaml -n ${NAMESPACE}
+                        kubectl apply -f babyshield-deployment.yaml
                         kubectl rollout status deployment/babyshield-deployment -n ${NAMESPACE}
                     '''
                 }
             }
-        }
-    }
-
-    post {
-        always {
-            echo "Pipeline finished. Cleaning up..."
         }
     }
 }
