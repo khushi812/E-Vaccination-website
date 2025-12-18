@@ -58,7 +58,7 @@ spec:
 
         IMAGE_LOCAL   = "babyshield:latest"
         REGISTRY      = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
-        REGISTRY_PATH = "smruti-project/babyshield-frontend"
+        REGISTRY_PATH = "2401180/e-vaccination-frontend"
         IMAGE_TAGGED  = "${REGISTRY}/${REGISTRY_PATH}:v${env.BUILD_NUMBER}"
 
         NAMESPACE     = "2401180"
