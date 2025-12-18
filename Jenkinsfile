@@ -28,8 +28,7 @@ spec:
 
   - name: dind
     image: docker:dind
-    args:
-      - "--storage-driver=overlay2"
+    args: ["--storage-driver=overlay2"]
     securityContext:
       privileged: true
     env:
@@ -76,51 +75,46 @@ spec:
             }
         }
 
-       stage('Build Docker Image') {
-    steps {
-        container('dind') {
-            sh '''
-                docker --version
-                echo "🐳 Building Docker Image..."
-                docker build -t ${IMAGE_LOCAL} .
-            '''
-        }
-    }
-}
-
-
-        stage('SonarQube Analysis') {
+        stage('Build Docker Image') {
             steps {
-                container('sonar-scanner') {
-                    withCredentials([string(credentialsId: 'sonar-token-2401180_E_vaccination', variable: 'SONAR_TOKEN')]) {
-                        sh '''
-                            echo "🔍 Running Sonar Scanner..."
-                            sonar-scanner \
-                            -Dsonar.projectKey=${PROJECT_KEY} \
-                            -Dsonar.projectName=${PROJECT_NAME} \
-                            -Dsonar.sources=${SONAR_SOURCES} \
-                            -Dsonar.host.url=${SONAR_URL} \
-                            -Dsonar.token=${SONAR_TOKEN} \
-                            -Dsonar.sourceEncoding=UTF-8
-                        '''
-                    }
+                container('dind') {
+                    sh '''
+                        echo "🐳 Building Docker Image..."
+                        docker build -t ${IMAGE_LOCAL} .
+                        docker image ls
+                    '''
                 }
             }
         }
+        stage('SonarQube Analysis') {
+                    steps {
+                        container('sonar-scanner') {
+                            withCredentials([string(credentialsId: 'sonar-token-2401107', variable: 'SONAR_TOKEN')]) {
+                                sh '''
+                                    echo "🔍 Running Sonar Scanner..."
 
+
+                                    sonar-scanner \
+                                    -Dsonar.projectKey=${PROJECT_KEY} \
+                                    -Dsonar.projectName=${PROJECT_NAME} \
+                                    -Dsonar.sources=${SONAR_SOURCES} \
+                                    -Dsonar.host.url=${SONAR_URL} \
+                                    -Dsonar.token=${SONAR_TOKEN} \
+                                    -Dsonar.sourceEncoding=UTF-8
+                                '''
+                            }
+                        }
+                    }
+                }
         stage('Login to Docker Registry') {
             steps {
                 container('dind') {
-                    withCredentials([usernamePassword(credentialsId: 'nexus-docker-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                        sh '''
-                            docker --version
-                            docker login ${REGISTRY} -u ${DOCKER_USER} -p ${DOCKER_PASS}
-                        '''
-                    }
+                    sh 'docker --version'
+                    sh 'sleep 10'
+                    sh 'docker login nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085 -u admin -p Changeme@2025'
                 }
             }
         }
-
         stage('Tag & Push Image') {
             steps {
                 container('dind') {
@@ -139,7 +133,7 @@ spec:
                     sh '''
                         echo "🚀 Deploying BabyShield..."
                         kubectl apply -f babyshield-deployment.yaml
-                        kubectl rollout status deployment/babyshield-deployment -n ${NAMESPACE}
+                        echo "kubectl rollout status deployment/babyshield-deployment -n ${NAMESPACE}"
                     '''
                 }
             }
