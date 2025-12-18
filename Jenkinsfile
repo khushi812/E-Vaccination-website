@@ -28,7 +28,7 @@ spec:
 
   - name: dind
     image: docker:dind
-    args: ["--storage-driver=overlay2"]
+    args: ["--host=tcp://0.0.0.0:2375", "--storage-driver=overlay2"]
     securityContext:
       privileged: true
     env:
@@ -65,6 +65,9 @@ spec:
 
         // -------- K8S CONFIG --------
         NAMESPACE     = "2401180"
+
+        // DinD Docker host
+        DOCKER_HOST   = "tcp://dind:2375"
     }
 
     stages {
@@ -79,6 +82,10 @@ spec:
             steps {
                 container('dind') {
                     sh '''
+                        echo "🐳 Waiting for Docker to be ready..."
+                        until docker info; do
+                          sleep 5
+                        done
                         echo "🐳 Building Docker Image..."
                         docker build -t ${IMAGE_LOCAL} .
                         docker image ls
@@ -86,35 +93,37 @@ spec:
                 }
             }
         }
+
         stage('SonarQube Analysis') {
-                    steps {
-                        container('sonar-scanner') {
-                            withCredentials([string(credentialsId: 'sonar-token-2401107', variable: 'SONAR_TOKEN')]) {
-                                sh '''
-                                    echo "🔍 Running Sonar Scanner..."
-
-
-                                    sonar-scanner \
-                                    -Dsonar.projectKey=${PROJECT_KEY} \
-                                    -Dsonar.projectName=${PROJECT_NAME} \
-                                    -Dsonar.sources=${SONAR_SOURCES} \
-                                    -Dsonar.host.url=${SONAR_URL} \
-                                    -Dsonar.token=${SONAR_TOKEN} \
-                                    -Dsonar.sourceEncoding=UTF-8
-                                '''
-                            }
-                        }
-                    }
-                }
-        stage('Login to Docker Registry') {
             steps {
-                container('dind') {
-                    sh 'docker --version'
-                    sh 'sleep 10'
-                    sh 'docker login nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085 -u admin -p Changeme@2025'
+                container('sonar-scanner') {
+                    withCredentials([string(credentialsId: 'sonar-token-2401107', variable: 'SONAR_TOKEN')]) {
+                        sh '''
+                            echo "🔍 Running Sonar Scanner..."
+                            sonar-scanner \
+                              -Dsonar.projectKey=${PROJECT_KEY} \
+                              -Dsonar.projectName=${PROJECT_NAME} \
+                              -Dsonar.sources=${SONAR_SOURCES} \
+                              -Dsonar.host.url=${SONAR_URL} \
+                              -Dsonar.token=${SONAR_TOKEN} \
+                              -Dsonar.sourceEncoding=UTF-8
+                        '''
+                    }
                 }
             }
         }
+
+        stage('Login to Docker Registry') {
+            steps {
+                container('dind') {
+                    sh '''
+                        echo "🔑 Logging in to Docker Registry..."
+                        docker login ${REGISTRY} -u admin -p Changeme@2025
+                    '''
+                }
+            }
+        }
+
         stage('Tag & Push Image') {
             steps {
                 container('dind') {
@@ -132,11 +141,11 @@ spec:
                 container('kubectl') {
                     sh '''
                         echo "🚀 Deploying BabyShield..."
-                        kubectl apply -f babyshield-deployment.yaml
-                        echo "kubectl rollout status deployment/babyshield-deployment -n ${NAMESPACE}"
+                        kubectl apply -f babyshield-deployment.yaml -n ${NAMESPACE}
+                        kubectl rollout status deployment/babyshield-deployment -n ${NAMESPACE}
                     '''
                 }
             }
         }
     }
-}
+}  
