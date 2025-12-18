@@ -1,13 +1,13 @@
 pipeline {
     agent {
         kubernetes {
-            yaml '''
+            yaml """
 apiVersion: v1
 kind: Pod
 spec:
   containers:
   - name: sonar-scanner
-    image: sonarsource/sonar-scanner-cli
+    image: sonarsource/sonar-scanner-cli:latest
     command: ["cat"]
     tty: true
 
@@ -27,7 +27,7 @@ spec:
       subPath: kubeconfig
 
   - name: dind
-    image: docker:dind
+    image: docker:dind:latest
     args: ["--storage-driver=overlay2"]
     securityContext:
       privileged: true
@@ -46,7 +46,7 @@ spec:
   - name: kubeconfig-secret
     secret:
       secretName: kubeconfig-secret
-'''
+"""
         }
     }
 
@@ -59,7 +59,7 @@ spec:
         IMAGE_LOCAL   = "babyshield:latest"
         REGISTRY      = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
         REGISTRY_PATH = "2401180/e-vaccination-frontend"
-        IMAGE_TAGGED  = "${REGISTRY}/${REGISTRY_PATH}:v${env.BUILD_NUMBER}"
+        IMAGE_TAGGED  = "${REGISTRY}/${REGISTRY_PATH}:v${BUILD_NUMBER}"
 
         NAMESPACE     = "2401180"
     }
@@ -76,10 +76,12 @@ spec:
             steps {
                 container('dind') {
                     sh '''
+                        echo "Waiting for Docker daemon..."
                         until docker info > /dev/null 2>&1; do
                           sleep 3
                         done
 
+                        echo "Building Docker image..."
                         docker build -t ${IMAGE_LOCAL} .
                         docker image ls
                     '''
@@ -92,6 +94,7 @@ spec:
                 container('sonar-scanner') {
                     withCredentials([string(credentialsId: 'sonar-token-2401180', variable: 'SONAR_TOKEN')]) {
                         sh '''
+                            echo "Running SonarQube Analysis..."
                             sonar-scanner \
                               -Dsonar.projectKey=${PROJECT_KEY} \
                               -Dsonar.projectName=${PROJECT_NAME} \
@@ -108,9 +111,12 @@ spec:
             steps {
                 container('dind') {
                     sh '''
+                        echo "Waiting for Docker daemon..."
                         until docker info > /dev/null 2>&1; do
                           sleep 3
                         done
+
+                        echo "Logging into Docker Registry..."
                         docker login ${REGISTRY} -u admin -p Changeme@2025
                     '''
                 }
@@ -121,7 +127,10 @@ spec:
             steps {
                 container('dind') {
                     sh '''
+                        echo "Tagging Docker image..."
                         docker tag ${IMAGE_LOCAL} ${IMAGE_TAGGED}
+
+                        echo "Pushing Docker image..."
                         docker push ${IMAGE_TAGGED}
                     '''
                 }
@@ -132,7 +141,9 @@ spec:
             steps {
                 container('kubectl') {
                     sh '''
+                        echo "Applying Kubernetes deployment..."
                         kubectl apply -f babyshield-deployment.yaml
+                        echo "Waiting for rollout to complete..."
                         kubectl rollout status deployment/babyshield-deployment -n ${NAMESPACE}
                     '''
                 }
