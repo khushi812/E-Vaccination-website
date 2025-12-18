@@ -89,7 +89,7 @@ spec:
         stage('SonarQube Analysis') {
                     steps {
                         container('sonar-scanner') {
-                            withCredentials([string(credentialsId: 'sonar-token-2401107', variable: 'SONAR_TOKEN')]) {
+                            withCredentials([string(credentialsId: 'sonar-token-2401180_E_vaccination', variable: 'SONAR_TOKEN')]) {
                                 sh '''
                                     echo "🔍 Running Sonar Scanner..."
 
