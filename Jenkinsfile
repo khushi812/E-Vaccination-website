@@ -1,13 +1,13 @@
 pipeline {
     agent {
         kubernetes {
-            yaml '''
+            yaml """
 apiVersion: v1
 kind: Pod
 spec:
   containers:
   - name: sonar-scanner
-    image: sonarsource/sonar-scanner-cli
+    image: sonarsource/sonar-scanner-cli:latest
     command: ["cat"]
     tty: true
 
@@ -19,34 +19,34 @@ spec:
       runAsUser: 0
       readOnlyRootFilesystem: false
     env:
-    - name: KUBECONFIG
-      value: /kube/config
+      - name: KUBECONFIG
+        value: /kube/config
     volumeMounts:
-    - name: kubeconfig-secret
-      mountPath: /kube/config
-      subPath: kubeconfig
+      - name: kubeconfig-secret
+        mountPath: /kube/config
+        subPath: kubeconfig
 
   - name: dind
-    image: docker:dind
+    image: docker:dind:latest
     args: ["--host=tcp://0.0.0.0:2375", "--storage-driver=overlay2"]
     securityContext:
       privileged: true
     env:
-    - name: DOCKER_TLS_CERTDIR
-      value: ""
+      - name: DOCKER_TLS_CERTDIR
+        value: ""
     volumeMounts:
-    - name: docker-config
-      mountPath: /etc/docker/daemon.json
-      subPath: daemon.json
+      - name: docker-config
+        mountPath: /etc/docker/daemon.json
+        subPath: daemon.json
 
   volumes:
-  - name: docker-config
-    configMap:
-      name: docker-daemon-config
-  - name: kubeconfig-secret
-    secret:
-      secretName: kubeconfig-secret
-'''
+    - name: docker-config
+      configMap:
+        name: docker-daemon-config
+    - name: kubeconfig-secret
+      secret:
+        secretName: kubeconfig-secret
+"""
         }
     }
 
@@ -83,9 +83,7 @@ spec:
                 container('dind') {
                     sh '''
                         echo "🐳 Waiting for Docker to be ready..."
-                        until docker info; do
-                          sleep 5
-                        done
+                        until docker info; do sleep 5; done
                         echo "🐳 Building Docker Image..."
                         docker build -t ${IMAGE_LOCAL} .
                         docker image ls
@@ -105,7 +103,7 @@ spec:
                               -Dsonar.projectName=${PROJECT_NAME} \
                               -Dsonar.sources=${SONAR_SOURCES} \
                               -Dsonar.host.url=${SONAR_URL} \
-                              -Dsonar.token=${SONAR_TOKEN} \
+                              -Dsonar.login=${SONAR_TOKEN} \
                               -Dsonar.sourceEncoding=UTF-8
                         '''
                     }
@@ -148,4 +146,10 @@ spec:
             }
         }
     }
-}  
+
+    post {
+        always {
+            echo "Pipeline finished. Cleaning up..."
+        }
+    }
+}
