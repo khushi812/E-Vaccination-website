@@ -156,23 +156,30 @@ spec:
             }
         }
 
-        stage('Deploy to Kubernetes') {
+       stage('Deploy to Kubernetes') {
     steps {
-        sh '''
-        echo "🚀 Deploying BabyShield Application..."
+        script {
+            container('kubectl') {
+                sh """#!/bin/sh
+                echo "🚀 Deploying BabyShield Application..."
 
-        # Apply Kubernetes deployment YAML
-        kubectl apply -f babyshield-deployment.yaml -n ${NAMESPACE}
+                kubectl version --client
 
-        echo "⏳ Checking rollout status..."
-        kubectl rollout status deployment/babyshield-deployment -n ${NAMESPACE}
+                kubectl apply -f babyshield-deployment.yaml -n ${NAMESPACE}
 
-        echo "✔ BabyShield successfully deployed!"
-        '''
+                echo "⏳ Checking rollout status..."
+                kubectl rollout status deployment/babyshield-deployment -n ${NAMESPACE}
+
+                echo "✔ BabyShield successfully deployed!"
+                """
+            }
+        }
+    }
+}
 
     }
 
                 }
-            }
-        }
+        
+    
     
