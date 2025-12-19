@@ -53,7 +53,7 @@ spec:
           # ---- PVC Mount (optional) ----
           volumeMounts:
             - name: babyshield-static
-              mountPath: /usr/share/nginx/html   # change if not using nginx
+              mountPath: /usr/share/nginx/html
 
       volumes:
         - name: babyshield-static
@@ -93,7 +93,7 @@ spec:
     - host: babyshield.imcc.com
       http:
         paths:
-          - path: 
+          - path: /
             pathType: Prefix
             backend:
               service:
