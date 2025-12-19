@@ -1,11 +1,11 @@
 # -------------------------------
-# PersistentVolumeClaim (optional – remove if not needed)
+# PersistentVolumeClaim (optional)
 # -------------------------------
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: babyshield-pvc
-  namespace: "2401180"
+  namespace: 2401180
 spec:
   accessModes:
     - ReadWriteOnce
@@ -13,11 +13,14 @@ spec:
     requests:
       storage: 1Gi
 ---
+# -------------------------------
+# Deployment
+# -------------------------------
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: babyshield-deployment
-  namespace: "2401180"
+  namespace: 2401180
 spec:
   replicas: 1
   selector:
@@ -34,27 +37,21 @@ spec:
           imagePullPolicy: Always
           ports:
             - containerPort: 80
-
-          # ---- HEALTH CHECKS ----
           readinessProbe:
             httpGet:
               path: /
               port: 80
             initialDelaySeconds: 10
             periodSeconds: 10
-
           livenessProbe:
             httpGet:
               path: /
               port: 80
             initialDelaySeconds: 30
             periodSeconds: 30
-
-          # ---- PVC Mount (optional) ----
           volumeMounts:
             - name: babyshield-static
               mountPath: /usr/share/nginx/html
-
       volumes:
         - name: babyshield-static
           persistentVolumeClaim:
@@ -67,7 +64,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: babyshield-service
-  namespace: "2401180"
+  namespace: 2401180
 spec:
   selector:
     app: babyshield
@@ -84,7 +81,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: babyshield-ingress
-  namespace: "2401180"
+  namespace: 2401180
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
