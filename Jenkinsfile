@@ -2,14 +2,14 @@ pipeline {
 
     agent {
         kubernetes {
-            yaml """
+            yaml '''
 apiVersion: v1
 kind: Pod
 spec:
   containers:
 
   - name: sonar-scanner
-    image: sonarsource/sonar-scanner-cli:latest
+    image: sonarsource/sonar-scanner-cli
     command: ["cat"]
     tty: true
 
@@ -29,44 +29,52 @@ spec:
       subPath: kubeconfig
 
   - name: dind
-    image: docker:dind:latest
-    args: ["--storage-driver=overlay2"]
+    image: docker:24-dind
     securityContext:
       privileged: true
     env:
     - name: DOCKER_TLS_CERTDIR
       value: ""
+    command:
+    - dockerd-entrypoint.sh
+    args:
+    - --host=unix:///var/run/docker.sock
+    - --storage-driver=overlay2
     volumeMounts:
+    - name: docker-storage
+      mountPath: /var/lib/docker
     - name: docker-config
       mountPath: /etc/docker/daemon.json
       subPath: daemon.json
 
   volumes:
+  - name: docker-storage
+    emptyDir: {}
   - name: docker-config
     configMap:
       name: docker-daemon-config
   - name: kubeconfig-secret
     secret:
       secretName: kubeconfig-secret
-"""
+'''
         }
     }
 
     environment {
 
-        // ---------- SONARQUBE CONFIG ----------
-        PROJECT_KEY   = "2401180_E_Vaccination"
-        PROJECT_NAME  = "2401180_E_Vaccination"
+        // ---------- SONAR CONFIG ----------
+        PROJECT_KEY   = "2401180_E_vaccination"
+        PROJECT_NAME  = "2401180_E_vaccination"
         SONAR_URL     = "http://my-sonarqube-sonarqube.sonarqube.svc.cluster.local:9000"
         SONAR_SOURCES = "."
 
-        // ---------- DOCKER / NEXUS CONFIG ----------
+        // ---------- DOCKER CONFIG ----------
         IMAGE_LOCAL   = "babyshield:latest"
         REGISTRY      = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
-        REGISTRY_PATH = "2401180/e-vaccination-frontend"
+        REGISTRY_PATH = "2401180/babyshield"
         IMAGE_TAGGED  = "${REGISTRY}/${REGISTRY_PATH}:v${env.BUILD_NUMBER}"
 
-        // ---------- KUBERNETES CONFIG ----------
+        // ---------- K8S CONFIG ----------
         NAMESPACE     = "2401180"
     }
 
@@ -82,18 +90,16 @@ spec:
         stage('Build Docker Image') {
             steps {
                 container('dind') {
-                    timeout(time: 5, unit: 'MINUTES') {
-                        sh '''
-                            echo "⏳ Waiting for Docker daemon..."
-                            until docker info > /dev/null 2>&1; do
-                              sleep 3
-                            done
+                    sh '''
+                        echo "⏳ Waiting for Docker daemon..."
+                        until docker info > /dev/null 2>&1; do
+                          sleep 3
+                        done
 
-                            echo "🐳 Building Docker image..."
-                            docker build -t ${IMAGE_LOCAL} .
-                            docker image ls
-                        '''
-                    }
+                        echo "🐳 Building Docker Image..."
+                        docker build -t ${IMAGE_LOCAL} .
+                        docker image ls
+                    '''
                 }
             }
         }
@@ -115,7 +121,7 @@ spec:
                               -Dsonar.projectName=${PROJECT_NAME} \
                               -Dsonar.sources=${SONAR_SOURCES} \
                               -Dsonar.host.url=${SONAR_URL} \
-                              -Dsonar.login=${SONAR_TOKEN} \
+                              -Dsonar.token=${SONAR_TOKEN} \
                               -Dsonar.sourceEncoding=UTF-8
                         '''
                     }
@@ -126,23 +132,14 @@ spec:
         stage('Login to Docker Registry') {
             steps {
                 container('dind') {
-                    withCredentials([
-                        usernamePassword(
-                            credentialsId: 'docker-registry-cred',
-                            usernameVariable: 'DOCKER_USER',
-                            passwordVariable: 'DOCKER_PASS'
-                        )
-                    ]) {
-                        sh '''
-                            echo "⏳ Waiting for Docker daemon..."
-                            until docker info > /dev/null 2>&1; do
-                              sleep 3
-                            done
+                    sh '''
+                        until docker info > /dev/null 2>&1; do
+                          sleep 3
+                        done
 
-                            echo "🔐 Logging into Docker Registry..."
-                            echo "$DOCKER_PASS" | docker login ${REGISTRY} -u "$DOCKER_USER" --password-stdin
-                        '''
-                    }
+                        docker --version
+                        docker login ${REGISTRY} -u admin -p Changeme@2025
+                    '''
                 }
             }
         }
@@ -150,15 +147,11 @@ spec:
         stage('Tag & Push Image') {
             steps {
                 container('dind') {
-                    timeout(time: 5, unit: 'MINUTES') {
-                        sh '''
-                            echo "🏷 Tagging Docker image..."
-                            docker tag ${IMAGE_LOCAL} ${IMAGE_TAGGED}
-
-                            echo "📤 Pushing Docker image..."
-                            docker push ${IMAGE_TAGGED}
-                        '''
-                    }
+                    sh '''
+                        echo "📤 Tagging & Pushing Image..."
+                        docker tag ${IMAGE_LOCAL} ${IMAGE_TAGGED}
+                        docker push ${IMAGE_TAGGED}
+                    '''
                 }
             }
         }
@@ -166,26 +159,13 @@ spec:
         stage('Deploy to Kubernetes') {
             steps {
                 container('kubectl') {
-                    timeout(time: 5, unit: 'MINUTES') {
-                        sh '''
-                            echo "🚀 Deploying application to Kubernetes..."
-                            kubectl apply -f babyshield-deployment.yaml
-
-                            echo "⏳ Waiting for rollout..."
-                            kubectl rollout status deployment/babyshield-deployment -n ${NAMESPACE}
-                        '''
-                    }
+                    sh '''
+                        echo "🚀 Deploying BabyShield Application..."
+                        kubectl apply -f babyshield-deployment.yaml
+                        kubectl rollout status deployment/babyshield-deployment -n ${NAMESPACE}
+                    '''
                 }
             }
-        }
-    }
-
-    post {
-        success {
-            echo "🎉 CI/CD Pipeline completed successfully!"
-        }
-        failure {
-            echo "❌ CI/CD Pipeline failed. Please check logs."
         }
     }
 }
