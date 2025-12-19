@@ -68,7 +68,7 @@ spec:
         SONAR_URL     = "http://my-sonarqube-sonarqube.sonarqube.svc.cluster.local:9000"
         SONAR_SOURCES = "."
 
-        // ---------- DOCKER CONFIG ----------
+        // ---------- DOCKER / NEXUS CONFIG ----------
         IMAGE_LOCAL   = "babyshield:latest"
         REGISTRY      = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
         REGISTRY_PATH = "2401180/babyshield"
@@ -129,7 +129,7 @@ spec:
             }
         }
 
-        stage('Login to Docker Registry') {
+        stage('Login to Docker Registry (Nexus)') {
             steps {
                 container('dind') {
                     sh '''
@@ -144,7 +144,7 @@ spec:
             }
         }
 
-        stage('Tag & Push Image') {
+        stage('Tag & Push Image to Nexus') {
             steps {
                 container('dind') {
                     sh '''
@@ -156,30 +156,22 @@ spec:
             }
         }
 
-       stage('Deploy to Kubernetes') {
-    steps {
-        script {
-            container('kubectl') {
-                sh """#!/bin/sh
-                echo "🚀 Deploying BabyShield Application..."
+        stage('Deploy to Kubernetes') {
+            steps {
+                container('kubectl') {
+                    sh '''
+                        echo "🚀 Deploying BabyShield Application..."
 
-                kubectl version --client
+                        kubectl version --client
+                        kubectl apply -f babyshield-deployment.yaml -n ${NAMESPACE}
 
-                kubectl apply -f babyshield-deployment.yaml -n ${NAMESPACE}
+                        echo "⏳ Checking rollout status..."
+                        kubectl rollout status deployment/babyshield-deployment -n ${NAMESPACE}
 
-                echo "⏳ Checking rollout status..."
-                kubectl rollout status deployment/babyshield-deployment -n ${NAMESPACE}
-
-                echo "✔ BabyShield successfully deployed!"
-                """
+                        echo "✔ BabyShield successfully deployed!"
+                    '''
+                }
             }
         }
     }
 }
-
-    }
-
-                }
-        
-
-    
