@@ -1,4 +1,5 @@
 pipeline {
+
     agent {
         kubernetes {
             yaml """
@@ -6,8 +7,9 @@ apiVersion: v1
 kind: Pod
 spec:
   containers:
+
   - name: sonar-scanner
-    image: sonarsource/sonar-scanner-cli:latest
+    image: sonarsource/sonar-scanner-cli:5
     command: ["cat"]
     tty: true
 
@@ -17,7 +19,6 @@ spec:
     tty: true
     securityContext:
       runAsUser: 0
-      readOnlyRootFilesystem: false
     env:
     - name: KUBECONFIG
       value: /kube/config
@@ -28,21 +29,23 @@ spec:
 
   - name: dind
     image: docker:dind:latest
-    args: ["--storage-driver=overlay2"]
     securityContext:
       privileged: true
+    args:
+      - "--host=tcp://0.0.0.0:2375"
+      - "--storage-driver=overlay2"
     env:
-    - name: DOCKER_TLS_CERTDIR
-      value: ""
+      - name: DOCKER_TLS_CERTDIR
+        value: ""
+      - name: DOCKER_HOST
+        value: tcp://localhost:2375
     volumeMounts:
-    - name: docker-config
-      mountPath: /etc/docker/daemon.json
-      subPath: daemon.json
+      - name: docker-graph-storage
+        mountPath: /var/lib/docker
 
   volumes:
-  - name: docker-config
-    configMap:
-      name: docker-daemon-config
+  - name: docker-graph-storage
+    emptyDir: {}
   - name: kubeconfig-secret
     secret:
       secretName: kubeconfig-secret
@@ -68,25 +71,24 @@ spec:
 
         stage('Checkout Code') {
             steps {
-                git url: 'https://github.com/khushi812/E-Vaccination-website.git', branch: 'main'
+                git branch: 'main',
+                    url: 'https://github.com/khushi812/E-Vaccination-website.git'
             }
         }
 
         stage('Build Docker Image') {
             steps {
                 container('dind') {
-                    timeout(time: 5, unit: 'MINUTES') {
-                        sh '''
-                            echo "Waiting for Docker daemon..."
-                            until docker info > /dev/null 2>&1; do
-                              sleep 3
-                            done
+                    sh '''
+                        echo "Waiting for Docker daemon..."
+                        until docker info > /dev/null 2>&1; do
+                          sleep 3
+                        done
 
-                            echo "Building Docker image..."
-                            docker build -t ${IMAGE_LOCAL} .
-                            docker image ls
-                        '''
-                    }
+                        echo "Building Docker image..."
+                        docker build -t ${IMAGE_LOCAL} .
+                        docker images
+                    '''
                 }
             }
         }
@@ -96,7 +98,6 @@ spec:
                 container('sonar-scanner') {
                     withCredentials([string(credentialsId: 'sonar-token-2401180', variable: 'SONAR_TOKEN')]) {
                         sh '''
-                            echo "Running SonarQube Analysis..."
                             sonar-scanner \
                               -Dsonar.projectKey=${PROJECT_KEY} \
                               -Dsonar.projectName=${PROJECT_NAME} \
@@ -109,18 +110,19 @@ spec:
             }
         }
 
-        stage('Login to Docker Registry') {
+        stage('Docker Login') {
             steps {
                 container('dind') {
-                    withCredentials([usernamePassword(credentialsId: 'docker-registry-cred', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: 'docker-registry-cred',
+                            usernameVariable: 'DOCKER_USER',
+                            passwordVariable: 'DOCKER_PASS'
+                        )
+                    ]) {
                         sh '''
-                            echo "Waiting for Docker daemon..."
-                            until docker info > /dev/null 2>&1; do
-                              sleep 3
-                            done
-
-                            echo "Logging into Docker Registry..."
-                            echo $DOCKER_PASS | docker login ${REGISTRY} -u $DOCKER_USER --password-stdin
+                            echo $DOCKER_PASS | docker login ${REGISTRY} \
+                            -u $DOCKER_USER --password-stdin
                         '''
                     }
                 }
@@ -130,15 +132,10 @@ spec:
         stage('Tag & Push Image') {
             steps {
                 container('dind') {
-                    timeout(time: 5, unit: 'MINUTES') {
-                        sh '''
-                            echo "Tagging Docker image..."
-                            docker tag ${IMAGE_LOCAL} ${IMAGE_TAGGED}
-
-                            echo "Pushing Docker image..."
-                            docker push ${IMAGE_TAGGED}
-                        '''
-                    }
+                    sh '''
+                        docker tag ${IMAGE_LOCAL} ${IMAGE_TAGGED}
+                        docker push ${IMAGE_TAGGED}
+                    '''
                 }
             }
         }
@@ -146,14 +143,10 @@ spec:
         stage('Deploy to Kubernetes') {
             steps {
                 container('kubectl') {
-                    timeout(time: 5, unit: 'MINUTES') {
-                        sh '''
-                            echo "Applying Kubernetes deployment..."
-                            kubectl apply -f babyshield-deployment.yaml
-                            echo "Waiting for rollout to complete..."
-                            kubectl rollout status deployment/babyshield-deployment -n ${NAMESPACE}
-                        '''
-                    }
+                    sh '''
+                        kubectl apply -f babyshield-deployment.yaml
+                        kubectl rollout status deployment/babyshield-deployment -n ${NAMESPACE}
+                    '''
                 }
             }
         }
