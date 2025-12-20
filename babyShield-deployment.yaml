@@ -1,19 +1,4 @@
 # -------------------------------
-# PersistentVolumeClaim (optional)
-# -------------------------------
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: babyshield-pvc
-  namespace: 2401180
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
----
-# -------------------------------
 # Deployment
 # -------------------------------
 apiVersion: apps/v1
@@ -33,29 +18,26 @@ spec:
     spec:
       containers:
         - name: babyshield-container
-          image: nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/babyshield:v1
+          # 🔹 Image pushed by Jenkins
+          image: nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/2401180/babyshield:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 80
+
           readinessProbe:
             httpGet:
               path: /
               port: 80
             initialDelaySeconds: 10
             periodSeconds: 10
+
           livenessProbe:
             httpGet:
               path: /
               port: 80
             initialDelaySeconds: 30
             periodSeconds: 30
-          volumeMounts:
-            - name: babyshield-static
-              mountPath: /usr/share/nginx/html
-      volumes:
-        - name: babyshield-static
-          persistentVolumeClaim:
-            claimName: babyshield-pvc
+
 ---
 # -------------------------------
 # Service
@@ -73,6 +55,7 @@ spec:
       port: 80
       targetPort: 80
   type: ClusterIP
+
 ---
 # -------------------------------
 # Ingress
