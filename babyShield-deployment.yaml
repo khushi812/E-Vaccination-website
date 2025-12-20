@@ -33,7 +33,7 @@ spec:
         - name: nexus-secret
       containers:
         - name: babyshield-container
-          image:  localhost:8085/2401180/babyShield:latest
+          image:  localhost:8085/2401180/babyshield:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
