@@ -78,7 +78,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    - host: babyshield.imcc.com
+    - host: E_vaccination_System.imcc.com
       http:
         paths:
           - path: /
