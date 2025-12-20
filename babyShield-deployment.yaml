@@ -14,7 +14,7 @@ metadata:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: babyshield-deployment
+  name: babyShield-deployment
   namespace: "2401180"
 spec:
   replicas: 1
@@ -32,8 +32,8 @@ spec:
       imagePullSecrets:
         - name: nexus-secret
       containers:
-        - name: babyshield-container
-          image: nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/2401180/babyshield:latest
+        - name: babyShield-container
+          image: nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/2401180/babyShield:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
