@@ -156,14 +156,14 @@ spec:
             }
         }
 
-        stage('Deploy to Kubernetes') {
-            steps {
-                script {
-                    container('kubectl') {
-                        sh """
-                        echo "🚀 Deploying BabyShield Application..."
+         stage('Deploy to Kubernetes') {
+    steps {
+        script {
+            container('kubectl') {
+                sh """#!/bin/sh
+                echo "🚀 Deploying BabyShield Application..."
 
-                        kubectl version --client
+                kubectl version --client
 
                 kubectl apply -f babyshield-deployment.yaml -n ${NAMESPACE}
 
