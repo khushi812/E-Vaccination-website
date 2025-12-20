@@ -160,15 +160,15 @@ spec:
             steps {
                 script {
                     container('kubectl') {
-                        sh """#!/bin/sh
+                        sh """
                         echo "🚀 Deploying BabyShield Application..."
 
                         kubectl version --client
 
-                kubectl apply -f babyshield-deployment.yaml -n ${NAMESPACE}
+                kubectl apply -f babyShield-deployment.yaml -n ${NAMESPACE}
 
                 echo "⏳ Checking rollout status..."
-                kubectl rollout status deployment/babyshield-deployment -n ${NAMESPACE}
+                kubectl rollout status deployment/babyShield-deployment -n ${NAMESPACE}
 
                 echo "✔ BabyShield successfully deployed!"
                 """
