@@ -17,7 +17,7 @@ metadata:
   namespace: "2401180"
 spec:
   replicas: 1
-  progressDeadlineSeconds: 600
+  progressDeadlineSeconds: 300
   strategy:
     type: Recreate
   selector:
@@ -33,20 +33,23 @@ spec:
       containers:
         - name: babyshield-container
           image: nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/2401180/babyshield:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 80
 
-          # ✅ TEMP FIX: remove probes (VERY IMPORTANT)
-          # Once app is confirmed working, we can re-add probes
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 10
 
-          resources:
-            requests:
-              cpu: "100m"
-              memory: "128Mi"
-            limits:
-              cpu: "250m"
-              memory: "256Mi"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 30
+            periodSeconds: 30
 
 ---
 # -------------------------------
