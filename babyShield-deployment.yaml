@@ -14,7 +14,7 @@ metadata:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: babyShield-deployment
+  name: babyshield-deployment
   namespace: "2401180"
 spec:
   replicas: 1
@@ -32,12 +32,11 @@ spec:
       imagePullSecrets:
         - name: nexus-secret
       containers:
-        - name: babyShield-container
-          image: nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/2401180/babyShield:latest
+        - name: babyshield-container
+          image:  localhost:8085/2401180/babyShield:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
-          # Startup probe ensures pod waits until app is ready
           startupProbe:
             httpGet:
               path: /
@@ -74,15 +73,15 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: babyShield-service
+  name: babyshield-service
   namespace: "2401180"
 spec:
   selector:
-    app: babyShield
+    app: babyshield
   ports:
     - protocol: TCP
-      port: 80          # External service port
-      targetPort: 3000  # Matches container port
+      port: 80
+      targetPort: 3000
   type: ClusterIP
 
 ---
@@ -93,7 +92,7 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: babyShield-ingress
+  name: babyshield-ingress
   namespace: "2401180"
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
@@ -107,6 +106,6 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: babyShield-service
+                name: babyshield-service
                 port:
                   number: 80
