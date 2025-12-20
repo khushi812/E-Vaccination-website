@@ -1,5 +1,5 @@
 # -------------------------------
-# Namespace
+# Namespace (Auto-create)
 # -------------------------------
 apiVersion: v1
 kind: Namespace
@@ -17,9 +17,6 @@ metadata:
   namespace: "2401180"
 spec:
   replicas: 1
-  progressDeadlineSeconds: 300
-  strategy:
-    type: Recreate
   selector:
     matchLabels:
       app: babyshield
@@ -32,7 +29,7 @@ spec:
         - name: nexus-secret
       containers:
         - name: babyshield-container
-          image: nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/2401180/babyshield:latest
+          image: 127.0.0.1:30085/2401180/babyshield:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 80
