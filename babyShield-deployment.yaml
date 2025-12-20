@@ -74,11 +74,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: babyshield-service
+  name: babyShield-service
   namespace: "2401180"
 spec:
   selector:
-    app: babyshield
+    app: babyShield
   ports:
     - protocol: TCP
       port: 80          # External service port
@@ -93,7 +93,7 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: babyshield-ingress
+  name: babyShield-ingress
   namespace: "2401180"
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
@@ -107,6 +107,6 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: babyshield-service
+                name: babyShield-service
                 port:
                   number: 80
