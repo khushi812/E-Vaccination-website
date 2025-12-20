@@ -1,11 +1,12 @@
 # -------------------------------
-# Namespace (Auto-create if missing)
+# Namespace (Auto-create)
 # -------------------------------
 apiVersion: v1
 kind: Namespace
 metadata:
   name: "2401180"
 
+---
 # -------------------------------
 # Deployment
 # -------------------------------
@@ -26,7 +27,6 @@ spec:
     spec:
       containers:
         - name: babyshield-container
-          # 🔹 Image pushed by Jenkins
           image: nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/2401180/babyshield:latest
           imagePullPolicy: Always
           ports:
@@ -78,7 +78,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    - host: E_Vaccination_System.imcc.com
+    - host: e-vaccination-system.imcc.com
       http:
         paths:
           - path: /
