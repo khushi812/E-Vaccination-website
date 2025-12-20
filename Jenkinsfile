@@ -165,7 +165,7 @@ spec:
 
                         kubectl version --client
 
-                kubectl apply -f babyShield-deployment.yaml -n ${NAMESPACE}
+                kubectl apply -f babyshield-deployment.yaml -n ${NAMESPACE}
 
                 echo "⏳ Checking rollout status..."
                 kubectl rollout status deployment/babyshield-deployment -n ${NAMESPACE}
