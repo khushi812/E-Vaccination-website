@@ -168,7 +168,7 @@ spec:
                 kubectl apply -f babyShield-deployment.yaml -n ${NAMESPACE}
 
                 echo "⏳ Checking rollout status..."
-                kubectl rollout status deployment/babyShield-deployment -n ${NAMESPACE}
+                kubectl rollout status deployment/babyshield-deployment -n ${NAMESPACE}
 
                 echo "✔ BabyShield successfully deployed!"
                 """
