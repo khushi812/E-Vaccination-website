@@ -19,6 +19,7 @@ spec:
     tty: true
     securityContext:
       runAsUser: 0
+      readOnlyRootFilesystem: false
     env:
     - name: KUBECONFIG
       value: /kube/config
@@ -34,17 +35,24 @@ spec:
     env:
     - name: DOCKER_TLS_CERTDIR
       value: ""
-    command: ["dockerd-entrypoint.sh"]
+    command:
+    - dockerd-entrypoint.sh
     args:
     - --host=unix:///var/run/docker.sock
     - --storage-driver=overlay2
     volumeMounts:
     - name: docker-storage
       mountPath: /var/lib/docker
+    - name: docker-config
+      mountPath: /etc/docker/daemon.json
+      subPath: daemon.json
 
   volumes:
   - name: docker-storage
     emptyDir: {}
+  - name: docker-config
+    configMap:
+      name: docker-daemon-config
   - name: kubeconfig-secret
     secret:
       secretName: kubeconfig-secret
@@ -54,19 +62,19 @@ spec:
 
     environment {
 
-        // ---------- SONAR ----------
+        // ---------- SONAR CONFIG ----------
         PROJECT_KEY   = "2401180_E_vaccination"
         PROJECT_NAME  = "2401180_E_vaccination"
-        SONAR_URL     = "http://my-sonarqube-sonarqube.sonarqube.sonarqube.svc.cluster.local:9000"
+        SONAR_URL     = "http://my-sonarqube-sonarqube.sonarqube.svc.cluster.local:9000"
         SONAR_SOURCES = "."
 
-        // ---------- DOCKER / NEXUS ----------
+        // ---------- DOCKER / NEXUS CONFIG ----------
         IMAGE_LOCAL   = "babyshield:latest"
         REGISTRY      = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
         REGISTRY_PATH = "2401180/babyshield"
-        IMAGE_TAGGED  = "${REGISTRY}/${REGISTRY_PATH}:v${BUILD_NUMBER}"
+        IMAGE_TAGGED  = "${REGISTRY}/${REGISTRY_PATH}:v${env.BUILD_NUMBER}"
 
-        // ---------- K8S ----------
+        // ---------- K8S CONFIG ----------
         NAMESPACE     = "2401180"
     }
 
@@ -74,7 +82,8 @@ spec:
 
         stage('Checkout Code') {
             steps {
-                git url: 'https://github.com/khushi812/E-Vaccination-website.git', branch: 'main'
+                git url: 'https://github.com/khushi812/E-Vaccination-website.git',
+                    branch: 'main'
             }
         }
 
@@ -82,8 +91,14 @@ spec:
             steps {
                 container('dind') {
                     sh '''
-                        until docker info > /dev/null 2>&1; do sleep 3; done
+                        echo "⏳ Waiting for Docker daemon..."
+                        until docker info > /dev/null 2>&1; do
+                          sleep 3
+                        done
+
+                        echo "🐳 Building Docker Image..."
                         docker build -t ${IMAGE_LOCAL} .
+                        docker image ls
                     '''
                 }
             }
@@ -92,35 +107,48 @@ spec:
         stage('SonarQube Analysis') {
             steps {
                 container('sonar-scanner') {
-                    withCredentials([string(credentialsId: 'sonar-token-2401180', variable: 'SONAR_TOKEN')]) {
+                    withCredentials([
+                        string(
+                            credentialsId: 'sonar-token-2401180',
+                            variable: 'SONAR_TOKEN'
+                        )
+                    ]) {
                         sh '''
-                        sonar-scanner \
-                          -Dsonar.projectKey=${PROJECT_KEY} \
-                          -Dsonar.projectName=${PROJECT_NAME} \
-                          -Dsonar.sources=${SONAR_SOURCES} \
-                          -Dsonar.host.url=${SONAR_URL} \
-                          -Dsonar.token=${SONAR_TOKEN}
+                            echo "🔍 Running SonarQube Analysis..."
+
+                            sonar-scanner \
+                              -Dsonar.projectKey=${PROJECT_KEY} \
+                              -Dsonar.projectName=${PROJECT_NAME} \
+                              -Dsonar.sources=${SONAR_SOURCES} \
+                              -Dsonar.host.url=${SONAR_URL} \
+                              -Dsonar.token=${SONAR_TOKEN} \
+                              -Dsonar.sourceEncoding=UTF-8
                         '''
                     }
                 }
             }
         }
 
-        stage('Login to Nexus') {
+        stage('Login to Docker Registry (Nexus)') {
             steps {
                 container('dind') {
                     sh '''
-                        until docker info > /dev/null 2>&1; do sleep 3; done
+                        until docker info > /dev/null 2>&1; do
+                          sleep 3
+                        done
+
+                        docker --version
                         docker login ${REGISTRY} -u admin -p Changeme@2025
                     '''
                 }
             }
         }
 
-        stage('Tag & Push Image') {
+        stage('Tag & Push Image to Nexus') {
             steps {
                 container('dind') {
                     sh '''
+                        echo "📤 Tagging & Pushing Image..."
                         docker tag ${IMAGE_LOCAL} ${IMAGE_TAGGED}
                         docker push ${IMAGE_TAGGED}
                     '''
@@ -130,23 +158,24 @@ spec:
 
         stage('Deploy to Kubernetes') {
             steps {
-                container('kubectl') {
-                    sh '''
-                        set -e
-                        echo "🚀 Deploying BabyShield..."
+                script {
+                    container('kubectl') {
+                        sh """
+                        echo "🚀 Deploying BabyShield Application..."
 
-                        kubectl create namespace ${NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
+                        kubectl version --client
 
-                        kubectl apply -f babyShield-deployment.yaml -n ${NAMESPACE}
+                kubectl apply -f babyShield-deployment.yaml -n ${NAMESPACE}
 
-                        kubectl set image deployment/babyshield-deployment \
-                          babyshield-container=${IMAGE_TAGGED} \
-                          -n ${NAMESPACE}
+                echo "⏳ Checking rollout status..."
+                kubectl rollout status deployment/babyshield-deployment -n ${NAMESPACE}
 
-                        kubectl rollout status deployment/babyshield-deployment -n ${NAMESPACE}
-                    '''
-                }
+                echo "✔ BabyShield successfully deployed!"
+                """
             }
         }
+    }
+}
+
     }
 }
