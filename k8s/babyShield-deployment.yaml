@@ -31,20 +31,21 @@ spec:
         - name: babyshield-container
           image: 127.0.0.1:30085/2401180/babyshield:latest
           imagePullPolicy: Always
+
           ports:
-            - containerPort: 3000
+            - containerPort: 80     # ✅ FIXED
 
           readinessProbe:
             httpGet:
               path: /
-              port: 3000
+              port: 80              # ✅ FIXED
             initialDelaySeconds: 10
             periodSeconds: 10
 
           livenessProbe:
             httpGet:
               path: /
-              port: 3000
+              port: 80              # ✅ FIXED
             initialDelaySeconds: 30
             periodSeconds: 30
 
@@ -62,7 +63,7 @@ spec:
     app: babyshield
   ports:
     - port: 80
-      targetPort: 3000
+      targetPort: 80               # ✅ FIXED
   type: ClusterIP
 
 ---
