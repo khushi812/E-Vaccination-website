@@ -35,17 +35,24 @@ spec:
     env:
     - name: DOCKER_TLS_CERTDIR
       value: ""
-    command: ["dockerd-entrypoint.sh"]
+    command:
+    - dockerd-entrypoint.sh
     args:
     - --host=unix:///var/run/docker.sock
     - --storage-driver=overlay2
     volumeMounts:
     - name: docker-storage
       mountPath: /var/lib/docker
+    - name: docker-config
+      mountPath: /etc/docker/daemon.json
+      subPath: daemon.json
 
   volumes:
   - name: docker-storage
     emptyDir: {}
+  - name: docker-config
+    configMap:
+      name: docker-daemon-config
   - name: kubeconfig-secret
     secret:
       secretName: kubeconfig-secret
@@ -55,20 +62,20 @@ spec:
 
     environment {
 
-        // ---------- SONAR ----------
+        // ---------- SONAR CONFIG ----------
         PROJECT_KEY   = "2401180_E_vaccination"
         PROJECT_NAME  = "2401180_E_vaccination"
         SONAR_URL     = "http://my-sonarqube-sonarqube.sonarqube.svc.cluster.local:9000"
         SONAR_SOURCES = "."
 
-        // ---------- DOCKER / NEXUS ----------
+        // ---------- DOCKER / NEXUS CONFIG ----------
+        IMAGE_LOCAL   = "babyshield:latest"
         REGISTRY      = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
         REGISTRY_PATH = "2401180/babyshield"
-        IMAGE_LOCAL   = "babyshield:latest"
-        IMAGE_TAGGED  = "${REGISTRY}/${REGISTRY_PATH}:v${BUILD_NUMBER}"
+        IMAGE_TAGGED  = "${REGISTRY}/${REGISTRY_PATH}:v${env.BUILD_NUMBER}"
 
-        // ---------- K8S ----------
-        NAMESPACE = "2401180"
+        // ---------- K8S CONFIG ----------
+        NAMESPACE     = "2401180"
     }
 
     stages {
@@ -84,8 +91,14 @@ spec:
             steps {
                 container('dind') {
                     sh '''
-                    until docker info > /dev/null 2>&1; do sleep 3; done
-                    docker build -t ${IMAGE_LOCAL} .
+                        echo "⏳ Waiting for Docker daemon..."
+                        until docker info > /dev/null 2>&1; do
+                          sleep 3
+                        done
+
+                        echo "🐳 Building Docker Image..."
+                        docker build -t ${IMAGE_LOCAL} .
+                        docker image ls
                     '''
                 }
             }
@@ -94,65 +107,75 @@ spec:
         stage('SonarQube Analysis') {
             steps {
                 container('sonar-scanner') {
-                    withCredentials([string(
-                        credentialsId: 'sonar-token-2401180',
-                        variable: 'SONAR_TOKEN'
-                    )]) {
+                    withCredentials([
+                        string(
+                            credentialsId: 'sonar-token-2401180',
+                            variable: 'SONAR_TOKEN'
+                        )
+                    ]) {
                         sh '''
-                        sonar-scanner \
-                          -Dsonar.projectKey=${PROJECT_KEY} \
-                          -Dsonar.projectName=${PROJECT_NAME} \
-                          -Dsonar.sources=${SONAR_SOURCES} \
-                          -Dsonar.host.url=${SONAR_URL} \
-                          -Dsonar.token=${SONAR_TOKEN}
+                            echo "🔍 Running SonarQube Analysis..."
+
+                            sonar-scanner \
+                              -Dsonar.projectKey=${PROJECT_KEY} \
+                              -Dsonar.projectName=${PROJECT_NAME} \
+                              -Dsonar.sources=${SONAR_SOURCES} \
+                              -Dsonar.host.url=${SONAR_URL} \
+                              -Dsonar.token=${SONAR_TOKEN} \
+                              -Dsonar.sourceEncoding=UTF-8
                         '''
                     }
                 }
             }
         }
 
-        stage('Login to Nexus') {
-            steps {
-                container('dind') {
-                    withCredentials([usernamePassword(
-                        credentialsId: 'nexus-cred',
-                        usernameVariable: 'NEXUS_USER',
-                        passwordVariable: 'NEXUS_PASS'
-                    )]) {
-                        sh '''
-                        until docker info > /dev/null 2>&1; do sleep 3; done
-                        docker login ${REGISTRY} -u $NEXUS_USER -p $NEXUS_PASS
-                        '''
-                    }
-                }
-            }
-        }
-
-        stage('Tag & Push Image') {
+        stage('Login to Docker Registry (Nexus)') {
             steps {
                 container('dind') {
                     sh '''
-                    docker tag ${IMAGE_LOCAL} ${IMAGE_TAGGED}
-                    docker push ${IMAGE_TAGGED}
+                        until docker info > /dev/null 2>&1; do
+                          sleep 3
+                        done
+
+                        docker --version
+                        docker login ${REGISTRY} -u admin -p Changeme@2025
                     '''
                 }
             }
         }
 
-        stage('Deploy to Kubernetes') {
+        stage('Tag & Push Image to Nexus') {
             steps {
-                container('kubectl') {
+                container('dind') {
                     sh '''
-                    echo "🚀 Deploying application..."
-
-                    sed -i "s|IMAGE_TAG|${IMAGE_TAGGED}|g" babyshield-deployment.yaml
-
-                    kubectl apply -f babyshield-deployment.yaml -n ${NAMESPACE}
-
-                    kubectl rollout status deployment/babyshield-deployment -n ${NAMESPACE}
+                        echo "📤 Tagging & Pushing Image..."
+                        docker tag ${IMAGE_LOCAL} ${IMAGE_TAGGED}
+                        docker push ${IMAGE_TAGGED}
                     '''
                 }
             }
         }
+
+         stage('Deploy to Kubernetes') {
+    steps {
+        script {
+            container('kubectl') {
+                sh """#!/bin/sh
+                echo "🚀 Deploying BabyShield Application..."
+
+                kubectl version --client
+
+                kubectl apply -f babyshield-deployment.yaml -n ${NAMESPACE}
+
+                echo "⏳ Checking rollout status..."
+                kubectl rollout status deployment/babyshield-deployment -n ${NAMESPACE}
+
+                echo "✔ BabyShield successfully deployed!"
+                """
+            }
+        }
+    }
+}
+
     }
 }
