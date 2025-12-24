@@ -7,7 +7,6 @@ metadata:
   name: "2401180"
 
 ---
-
 # -------------------------------
 # Deployment
 # -------------------------------
@@ -35,29 +34,21 @@ spec:
           ports:
             - containerPort: 3000
 
-          startupProbe:
-            httpGet:
-              path: /
-              port: 3000
-            failureThreshold: 30
-            periodSeconds: 10
-
           readinessProbe:
             httpGet:
               path: /
               port: 3000
-            initialDelaySeconds: 20
+            initialDelaySeconds: 10
             periodSeconds: 10
 
           livenessProbe:
             httpGet:
               path: /
               port: 3000
-            initialDelaySeconds: 60
+            initialDelaySeconds: 30
             periodSeconds: 30
 
 ---
-
 # -------------------------------
 # Service
 # -------------------------------
@@ -75,7 +66,6 @@ spec:
   type: ClusterIP
 
 ---
-
 # -------------------------------
 # Ingress
 # -------------------------------
