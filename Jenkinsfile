@@ -162,7 +162,7 @@ spec:
             container('kubectl') {
                 sh """
 
-                kubectl apply -f babyshield-deployment.yaml
+                kubectl apply -f babyShield-deployment.yaml
 
                 echo "⏳ Checking rollout status..."
                 kubectl rollout status deployment/babyshield-deployment -n ${NAMESPACE}
