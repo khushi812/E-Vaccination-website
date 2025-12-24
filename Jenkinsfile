@@ -72,7 +72,7 @@ spec:
         IMAGE_LOCAL   = "babyshield:latest"
         REGISTRY      = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
         REGISTRY_PATH = "2401180/babyshield"
-        IMAGE_TAGGED  = "${REGISTRY}/${REGISTRY_PATH}:v${env.BUILD_NUMBER}"
+        IMAGE_TAGGED  = "${REGISTRY}/${REGISTRY_PATH}:latest"
 
         // ---------- K8S CONFIG ----------
         NAMESPACE     = "2401180"
