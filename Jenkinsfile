@@ -157,22 +157,23 @@ spec:
         }
 
          stage('Deploy to Kubernetes') {
-    steps {
-        script {
-            container('kubectl') {
-                dir('k8s')  {
-                    sh """
-                    kubectl apply -f babyShield-deployment.yaml
+            steps {
+                script {
+                    container('kubectl') {
+                        dir('k8s')  {
+                            sh """
+                                kubectl apply -f babyShield-deployment.yaml
 
-                    echo "⏳ Checking rollout status..."
-                    kubectl rollout status deployment/babyshield-deployment -n ${NAMESPACE}
+                                echo "⏳ Checking rollout status..."
+                                kubectl rollout status deployment/babyshield-deployment -n ${NAMESPACE}
 
-                    echo "✔ BabyShield successfully deployed!"
-                    """
+                                echo "✔ BabyShield successfully deployed!"
+                            """
+                        }
+                    }
                 }
+            }
         }
-    }
-}
 
     }
 }
